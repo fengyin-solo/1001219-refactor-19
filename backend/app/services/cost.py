@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.contract_settlement import with_contract_conclusion
 from app.store import store
 
 MODULE = "cost"
@@ -43,10 +44,18 @@ class CostService:
         entry["status"] = STATUS_ORDER[0]
         entry["pending"] = True
         entry["abnormal"] = False
+        contract_no = values.get("合同编号")
+        if contract_no is not None and str(contract_no).strip():
+            entry["合同编号"] = contract_no
         rows.append(entry)
-        return entry, []
+        return with_contract_conclusion(entry, values=values), []
 
-    def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
+    def run_action(
+        self,
+        entry_id: int,
+        action: str,
+        values: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any] | None, str]:
         entry = store.find(MODULE, entry_id)
         if entry is None:
             return None, f"费用记录 {entry_id} 不存在或已归档"
@@ -58,4 +67,9 @@ class CostService:
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
-        return entry, f"费用记录已{action}"
+        if action == "录入费用" and values is not None:
+            contract_no = values.get("合同编号")
+            if contract_no is not None and str(contract_no).strip():
+                entry["合同编号"] = contract_no
+        result = with_contract_conclusion(entry, values=values) if action == "录入费用" else entry
+        return result, f"费用记录已{action}"

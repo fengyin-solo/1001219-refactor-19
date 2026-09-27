@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.contract_settlement import settlement_conclusion
 from app.store import store
 
 MODULE = "contract2"
@@ -10,6 +11,13 @@ REQUIRED_FIELDS = ["合同编号", "签约双方", "合同类型"]
 STATUS_ORDER = ["待签约", "执行中", "已到期", "已终止"]
 ACTION_RULES = {"签约生效": "执行中", "到期提醒": "已到期", "终止合同": "已终止"}
 NEGATIVE_ACTIONS = []
+
+
+def _with_conclusion(row: dict[str, Any]) -> dict[str, Any]:
+    """在返回拷贝上附加统一结算结论，存储里的原始合同数据保持不动。"""
+    entry = dict(row)
+    entry.update(settlement_conclusion(row))
+    return entry
 
 
 class Contract2Service:
@@ -28,10 +36,11 @@ class Contract2Service:
             rows = [row for row in rows if row.get("status") == status]
         total = len(rows)
         start = max(page - 1, 0) * size
-        return rows[start:start + size], total
+        return [_with_conclusion(row) for row in rows[start:start + size]], total
 
     def get_entry(self, entry_id: int) -> dict[str, Any] | None:
-        return store.find(MODULE, entry_id)
+        row = store.find(MODULE, entry_id)
+        return _with_conclusion(row) if row is not None else None
 
     def create_entry(self, values: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
         missing = [field for field in REQUIRED_FIELDS if not str(values.get(field) or "").strip()]

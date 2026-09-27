@@ -3,13 +3,22 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.contract_settlement import settlement_conclusion
 from app.store import store
 
 MODULE = "cost"
+CONTRACT_MODULE = "contract2"
 REQUIRED_FIELDS = ["费用编号", "关联任务", "费用类别"]
 STATUS_ORDER = ["待录入", "待审核", "已审核", "已结算"]
 ACTION_RULES = {"录入费用": "待审核", "审核费用": "已审核", "结算费用": "已结算"}
 NEGATIVE_ACTIONS = []
+
+
+def _find_contract(contract_no: str) -> dict[str, Any] | None:
+    for row in store.rows(CONTRACT_MODULE):
+        if str(row.get("合同编号", "")) == contract_no:
+            return row
+    return None
 
 
 class CostService:
@@ -43,6 +52,17 @@ class CostService:
         entry["status"] = STATUS_ORDER[0]
         entry["pending"] = True
         entry["abnormal"] = False
+        contract_no = str(values.get("合同编号") or "").strip()
+        if contract_no:
+            entry["合同编号"] = contract_no
+            contract = _find_contract(contract_no)
+            if contract is None:
+                entry["结算费用标准"] = None
+                entry["结算口径"] = f"未找到合同编号 {contract_no} 对应的合作合同，未套用结算口径"
+            else:
+                conclusion = settlement_conclusion(contract)
+                entry["结算费用标准"] = conclusion["结算费用标准"]
+                entry["结算口径"] = conclusion["结算口径"]
         rows.append(entry)
         return entry, []
 
